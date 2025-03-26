@@ -3,7 +3,7 @@
 import { CHAT_ID } from '@/lib/constants'
 import { Model } from '@/lib/types/models'
 import { Message, useChat } from 'ai/react'
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ChatMessages } from './chat-messages'
 import { ChatPanel } from './chat-panel'
@@ -19,6 +19,9 @@ export function Chat({
   query?: string
   models?: Model[]
 }) {
+  const [files, setFiles] = useState<FileList | undefined>(undefined)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const {
     messages,
     input,
@@ -59,7 +62,17 @@ export function Chat({
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setData(undefined) // reset data to clear tool call
-    handleSubmit(e)
+    
+    // Submit with attachments if available
+    handleSubmit(e, {
+      experimental_attachments: files
+    })
+    
+    // Reset files after submission
+    setFiles(undefined)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
   }
 
   return (
@@ -82,6 +95,9 @@ export function Chat({
         query={query}
         append={append}
         models={models}
+        files={files}
+        setFiles={setFiles}
+        fileInputRef={fileInputRef}
       />
     </div>
   )

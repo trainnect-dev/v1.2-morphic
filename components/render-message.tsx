@@ -89,7 +89,7 @@ export function RenderMessage({
   }, [reasoningAnnotation])
 
   if (message.role === 'user') {
-    return <UserMessage message={message.content} />
+    return <UserMessage message={message} />
   }
 
   // New way: Use parts instead of toolInvocations
@@ -104,15 +104,18 @@ export function RenderMessage({
         />
       ))}
       {message.parts?.map((part, index) => {
-        switch (part.type) {
+        // Use type assertion for the entire part to handle custom part types
+        const customPart = part as any;
+        
+        switch (customPart.type) {
           case 'tool-invocation':
             return (
               <ToolSection
                 key={`${messageId}-tool-${index}`}
-                tool={part.toolInvocation}
-                isOpen={getIsOpen(part.toolInvocation.toolCallId)}
+                tool={customPart.toolInvocation}
+                isOpen={getIsOpen(customPart.toolInvocation.toolCallId)}
                 onOpenChange={open =>
-                  onOpenChange(part.toolInvocation.toolCallId, open)
+                  onOpenChange(customPart.toolInvocation.toolCallId, open)
                 }
               />
             )
@@ -120,7 +123,7 @@ export function RenderMessage({
             return (
               <AnswerSection
                 key={`${messageId}-text-${index}`}
-                content={part.text}
+                content={customPart.text}
                 isOpen={getIsOpen(messageId)}
                 onOpenChange={open => onOpenChange(messageId, open)}
                 chatId={chatId}
@@ -131,12 +134,20 @@ export function RenderMessage({
               <ReasoningSection
                 key={`${messageId}-reasoning-${index}`}
                 content={{
-                  reasoning: part.reasoning,
+                  reasoning: customPart.reasoning,
                   time: reasoningTime
                 }}
                 isOpen={getIsOpen(messageId)}
                 onOpenChange={open => onOpenChange(messageId, open)}
               />
+            )
+          case 'attachment':
+            return (
+              <div key={`${messageId}-attachment-${index}`}>
+                <h4>Attachment:</h4>
+                <p>{customPart.attachment.name}</p>
+                <p>{customPart.attachment.url}</p>
+              </div>
             )
           // Add other part types as needed
           default:

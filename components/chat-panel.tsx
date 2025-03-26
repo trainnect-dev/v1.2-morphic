@@ -3,7 +3,7 @@
 import { Model } from '@/lib/types/models'
 import { cn } from '@/lib/utils'
 import { Message } from 'ai'
-import { ArrowUp, MessageCirclePlus, Square } from 'lucide-react'
+import { ArrowUp, MessageCirclePlus, Paperclip, Square } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import Textarea from 'react-textarea-autosize'
@@ -25,6 +25,9 @@ interface ChatPanelProps {
   stop: () => void
   append: (message: any) => void
   models?: Model[]
+  files?: FileList | undefined
+  setFiles?: (files: FileList | undefined) => void
+  fileInputRef?: React.RefObject<HTMLInputElement>
 }
 
 export function ChatPanel({
@@ -37,7 +40,10 @@ export function ChatPanel({
   query,
   stop,
   append,
-  models
+  models,
+  files,
+  setFiles,
+  fileInputRef
 }: ChatPanelProps) {
   const [showEmptyScreen, setShowEmptyScreen] = useState(false)
   const router = useRouter()
@@ -45,6 +51,7 @@ export function ChatPanel({
   const isFirstRender = useRef(true)
   const [isComposing, setIsComposing] = useState(false) // Composition state
   const [enterDisabled, setEnterDisabled] = useState(false) // Disable Enter after composition ends
+  const [hasAttachments, setHasAttachments] = useState(false)
 
   const handleCompositionStart = () => setIsComposing(true)
 
@@ -59,6 +66,21 @@ export function ChatPanel({
   const handleNewChat = () => {
     setMessages([])
     router.push('/')
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0 && setFiles) {
+      setFiles(e.target.files)
+      setHasAttachments(true)
+    } else {
+      setHasAttachments(false)
+    }
+  }
+
+  const triggerFileInput = () => {
+    if (fileInputRef?.current) {
+      fileInputRef.current.click()
+    }
   }
 
   // if query is not empty, submit the query
@@ -95,41 +117,68 @@ export function ChatPanel({
         )}
       >
         <div className="relative flex flex-col w-full gap-2 bg-muted rounded-3xl border border-input">
-          <Textarea
-            ref={inputRef}
-            name="input"
-            rows={2}
-            maxRows={5}
-            tabIndex={0}
-            onCompositionStart={handleCompositionStart}
-            onCompositionEnd={handleCompositionEnd}
-            placeholder="Ask a question..."
-            spellCheck={false}
-            value={input}
-            className="resize-none w-full min-h-12 bg-transparent border-0 px-4 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-            onChange={e => {
-              handleInputChange(e)
-              setShowEmptyScreen(e.target.value.length === 0)
-            }}
-            onKeyDown={e => {
-              if (
-                e.key === 'Enter' &&
-                !e.shiftKey &&
-                !isComposing &&
-                !enterDisabled
-              ) {
-                if (input.trim().length === 0) {
-                  e.preventDefault()
-                  return
-                }
-                e.preventDefault()
-                const textarea = e.target as HTMLTextAreaElement
-                textarea.form?.requestSubmit()
-              }
-            }}
-            onFocus={() => setShowEmptyScreen(true)}
-            onBlur={() => setShowEmptyScreen(false)}
+          {/* Hidden file input */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            onChange={handleFileChange}
+            multiple
+            accept="image/*,application/pdf"
           />
+          
+          <div className="flex items-center">
+            <Textarea
+              ref={inputRef}
+              name="input"
+              rows={2}
+              maxRows={5}
+              tabIndex={0}
+              onCompositionStart={handleCompositionStart}
+              onCompositionEnd={handleCompositionEnd}
+              placeholder={hasAttachments ? "Ask about your files..." : "Ask a question..."}
+              spellCheck={false}
+              value={input}
+              className="resize-none w-full min-h-12 bg-transparent border-0 px-4 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              onChange={e => {
+                handleInputChange(e)
+                setShowEmptyScreen(e.target.value.length === 0)
+              }}
+              onKeyDown={e => {
+                if (
+                  e.key === 'Enter' &&
+                  !e.shiftKey &&
+                  !isComposing &&
+                  !enterDisabled
+                ) {
+                  if (input.trim().length === 0 && !hasAttachments) {
+                    e.preventDefault()
+                    return
+                  }
+                  e.preventDefault()
+                  const textarea = e.target as HTMLTextAreaElement
+                  textarea.form?.requestSubmit()
+                }
+              }}
+              onFocus={() => setShowEmptyScreen(true)}
+              onBlur={() => setShowEmptyScreen(false)}
+            />
+            <div className="flex items-center gap-2 pr-3">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="rounded-full"
+                onClick={triggerFileInput}
+                disabled={isLoading}
+              >
+                <Paperclip className={cn(
+                  "size-4",
+                  hasAttachments && "text-accent-blue"
+                )} />
+              </Button>
+            </div>
+          </div>
 
           {/* Bottom menu area */}
           <div className="flex items-center justify-between p-3">
@@ -164,7 +213,7 @@ export function ChatPanel({
                 size={'icon'}
                 variant={'outline'}
                 className={cn(isLoading && 'animate-pulse', 'rounded-full')}
-                disabled={input.length === 0 && !isLoading}
+                disabled={(input.length === 0 && !hasAttachments) && !isLoading}
                 onClick={isLoading ? stop : undefined}
               >
                 {isLoading ? <Square size={20} /> : <ArrowUp size={20} />}
@@ -174,14 +223,16 @@ export function ChatPanel({
         </div>
 
         {messages.length === 0 && (
-          <EmptyScreen
-            submitMessage={message => {
-              handleInputChange({
-                target: { value: message }
-              } as React.ChangeEvent<HTMLTextAreaElement>)
-            }}
-            className={cn(showEmptyScreen ? 'visible' : 'invisible')}
-          />
+          <div>
+            <EmptyScreen
+              submitMessage={message => {
+                handleInputChange({
+                  target: { value: message }
+                } as React.ChangeEvent<HTMLTextAreaElement>)
+              }}
+              className={cn(showEmptyScreen ? 'visible' : 'invisible')}
+            />
+          </div>
         )}
       </form>
     </div>

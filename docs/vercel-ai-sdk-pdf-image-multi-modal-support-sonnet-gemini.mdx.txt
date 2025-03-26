@@ -1,0 +1,285 @@
+
+
+1.  Carefully examine and follow the instructions and the images in the vercel-ai-sdk-pdf-image-multi-modal-support-sonnet-gemini.mdx file in order to add the new multi modal feature.  
+
+2.  Add a new file upload paperclip to the right of the blue search icon  
+
+3.  Make sure that when you update the app that you do not break the UI, and that all of your UI and input box updates keep the existing input box UI and responsiveness intact and that zou add the new icons in the exact same positon as the images in the updates to make folder
+
+
+---
+
+Carefully follow the instructions below to update our app for multimodal support for the Claude and Gemini models that already exist in our app.
+---
+
+---
+title: vercel-ai-sdk-pdf-image-multi-modal-support
+et-gemini
+description: Add multi-modal support that can process images and PDFs with the AI SDK.
+---
+
+# Multi-Modal Support
+
+In this guide, you will add Multi-Modal Support capable of understanding both images and PDFs.
+
+Multi-modal refers to the ability of a chatbot to understand and generate responses in multiple formats, such as text, images, PDFs, and videos. In this example, we will focus on sending images and PDFs and generating text-based responses.
+
+Different AI providers have varying levels of multi-modal support, for example:
+
+- OpenAI (GPT-4o): Supports image input
+- Anthropic (Sonnet 3.5): Supports image and PDF input
+- Google (Gemini 2.0): Supports image and PDF input
+
+<Note>
+  For a complete list of providers that support both image and PDF inputs, visit
+  the [providers documentation](/providers/ai-sdk-providers).
+</Note>
+
+
+### The AI SDK 
+
+<Note>
+  The AI SDK is designed to be a unified interface to interact with any large
+  language model. This means that you can change model and providers with just
+  one line of code! Learn more about [available providers](/providers) and
+  [building custom providers](/providers/community-providers/custom-providers)
+  in the [providers](/providers) section.
+</Note>
+
+<Note className="mb-4">
+
+</Note>
+
+## EXAMPLE VERCEL AI SDK CODE TO HELP WITH YOUR IMPLEMENTATION 
+
+- Add the ability to upload images and attach them alongside the chat messages.
+
+## Add Image Upload
+
+To make your chatbot multi-modal, you must add the ability to upload and send images to the model. There are two ways to send attachments alongside a message with the `useChat` hook: by [ providing a `FileList` object ](/docs/ai-sdk-ui/chatbot#filelist) or a [ list of URLs ](/docs/ai-sdk-ui/chatbot#urls) to the `handleSubmit` function. In this guide, you will be using the `FileList` approach as it does not require any additional setup.
+
+Update your root page (`app/page.tsx`) with the following code:
+
+```tsx filename="app/page.tsx" highlight="4-5,10-11,19-33,39-49,51-61"
+'use client';
+
+import { useChat } from '@ai-sdk/react';
+import { useRef, useState } from 'react';
+import Image from 'next/image';
+
+export default function Chat() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat();
+
+  const [files, setFiles] = useState<FileList | undefined>(undefined);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="flex flex-col w-full max-w-md py-24 mx-auto stretch">
+      {messages.map(m => (
+        <div key={m.id} className="whitespace-pre-wrap">
+          {m.role === 'user' ? 'User: ' : 'AI: '}
+          {m.content}
+          <div>
+            {m?.experimental_attachments
+              ?.filter(attachment =>
+                attachment?.contentType?.startsWith('image/'),
+              )
+              .map((attachment, index) => (
+                <Image
+                  key={`${m.id}-${index}`}
+                  src={attachment.url}
+                  width={500}
+                  height={500}
+                  alt={attachment.name ?? `attachment-${index}`}
+                />
+              ))}
+          </div>
+        </div>
+      ))}
+
+      <form
+        className="fixed bottom-0 w-full max-w-md p-2 mb-8 border border-gray-300 rounded shadow-xl space-y-2"
+        onSubmit={event => {
+          handleSubmit(event, {
+            experimental_attachments: files,
+          });
+
+          setFiles(undefined);
+
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+        }}
+      >
+        <input
+          type="file"
+          className=""
+          onChange={event => {
+            if (event.target.files) {
+              setFiles(event.target.files);
+            }
+          }}
+          multiple
+          ref={fileInputRef}
+        />
+        <input
+          className="w-full p-2"
+          value={input}
+          placeholder="Say something..."
+          onChange={handleInputChange}
+        />
+      </form>
+    </div>
+  );
+}
+```
+
+In this code, you:
+
+1. Create state to hold the files and create a ref to the file input field.
+2. Display the "uploaded" files in the UI.
+3. Update the `onSubmit` function, to call the `handleSubmit` function manually, passing the the files as an option using the `experimental_attachments` key.
+4. Add a file input field to the form, including an `onChange` handler to handle updating the files state.
+
+## Working with PDFs
+
+To enable PDF support, you can switch to a provider that handles PDFs like Google's Gemini or Anthropic's Claude. Here's how to modify the code to use Anthropic:
+
+3. Modify your route handler:
+
+```tsx filename="app/api/chat/route.ts" highlight="2,10-15,18-20"
+import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
+import { streamText, type Message } from 'ai';
+
+export const maxDuration = 30;
+
+export async function POST(req: Request) {
+  const { messages }: { messages: Message[] } = await req.json();
+
+  // check if user has sent a PDF
+  const messagesHavePDF = messages.some(message =>
+    message.experimental_attachments?.some(
+      a => a.contentType === 'application/pdf',
+    ),
+  );
+
+  const result = streamText({
+    model: messagesHavePDF
+      ? anthropic('claude-3-5-sonnet-latest')
+      : openai('gpt-4o'),
+    messages,
+  });
+
+  return result.toDataStreamResponse();
+}
+```
+
+Now your chatbot can process both images and PDFs! You can automatically route PDF requests to Claude Sonnet 3.5, and Google Gemini 2.0 flash and image requests to OpenAI's gpt-4o model.
+
+Finally, to display PDFs in your chat interface, update the message rendering code in your frontend to show PDF attachments in an `<iframe>`:
+
+```tsx filename="app/page.tsx" highlight="20-44"
+'use client';
+
+import { useChat } from '@ai-sdk/react';
+import { useRef, useState } from 'react';
+import Image from 'next/image';
+
+export default function Chat() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat();
+
+  const [files, setFiles] = useState<FileList | undefined>(undefined);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="flex flex-col w-full max-w-md py-24 mx-auto stretch">
+      {messages.map(m => (
+        <div key={m.id} className="whitespace-pre-wrap">
+          {m.role === 'user' ? 'User: ' : 'AI: '}
+          {m.content}
+          <div>
+            {m?.experimental_attachments
+              ?.filter(
+                attachment =>
+                  attachment?.contentType?.startsWith('image/') ||
+                  attachment?.contentType?.startsWith('application/pdf'),
+              )
+              .map((attachment, index) =>
+                attachment.contentType?.startsWith('image/') ? (
+                  <Image
+                    key={`${m.id}-${index}`}
+                    src={attachment.url}
+                    width={500}
+                    height={500}
+                    alt={attachment.name ?? `attachment-${index}`}
+                  />
+                ) : attachment.contentType?.startsWith('application/pdf') ? (
+                  <iframe
+                    key={`${m.id}-${index}`}
+                    src={attachment.url}
+                    width={500}
+                    height={600}
+                    title={attachment.name ?? `attachment-${index}`}
+                  />
+                ) : null,
+              )}
+          </div>
+        </div>
+      ))}
+
+      <form
+        className="fixed bottom-0 w-full max-w-md p-2 mb-8 border border-gray-300 rounded shadow-xl space-y-2"
+        onSubmit={event => {
+          handleSubmit(event, {
+            experimental_attachments: files,
+          });
+
+          setFiles(undefined);
+
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+        }}
+      >
+        <input
+          type="file"
+          className=""
+          onChange={event => {
+            if (event.target.files) {
+              setFiles(event.target.files);
+            }
+          }}
+          multiple
+          ref={fileInputRef}
+        />
+        <input
+          className="w-full p-2"
+          value={input}
+          placeholder="Say something..."
+          onChange={handleInputChange}
+        />
+      </form>
+    </div>
+  );
+}
+```
+
+Try uploading a PDF and asking questions about its contents.
+
+<Note>
+  When switching providers, be sure to check the [provider
+  documentation](/providers/ai-sdk-providers) for specific file size limits and
+  supported file types.
+</Note>
+
+
+---
+DO NOT CHANGE MY MODELS/REMEMBER THAT THIS IS A FULLY FEATURED VERCEL AI SDK BASED APP.  DO NOT ADD ANY NON VERCEL AI SDK BASED CODE TO THIS APP
+
+IMPORTANT THIS APP IS RUN USING DOCKER
+docker compose up -d
+
+
+
+---

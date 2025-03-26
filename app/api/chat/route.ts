@@ -12,7 +12,7 @@ const DEFAULT_MODEL: Model = {
   provider: 'OpenAI',
   providerId: 'openai',
   enabled: true,
-  toolCallType: 'native'
+  toolCallType: 'native' as const
 }
 
 export async function POST(req: Request) {
@@ -53,6 +53,60 @@ export async function POST(req: Request) {
           statusText: 'Not Found'
         }
       )
+    }
+
+    // Check if messages contain PDF attachments
+    const messagesHavePDF = messages.some((message: any) =>
+      message.experimental_attachments?.some(
+        (a: any) => a.contentType === 'application/pdf'
+      )
+    )
+
+    // If PDF is detected, use Claude for better PDF handling
+    if (messagesHavePDF && isProviderEnabled('anthropic')) {
+      // Find a Claude model that supports PDFs (Claude Sonnet 3.5)
+      const claudeModel: Model = {
+        id: 'claude-3-5-sonnet-latest',
+        name: 'Claude 3.5 Sonnet',
+        provider: 'Anthropic',
+        providerId: 'anthropic',
+        enabled: true,
+        toolCallType: 'manual' as const
+      }
+      
+      return createManualToolStreamResponse({
+        messages,
+        model: claudeModel,
+        chatId,
+        searchMode
+      })
+    }
+
+    // Check if messages contain image attachments
+    const messagesHaveImage = messages.some((message: any) =>
+      message.experimental_attachments?.some(
+        (a: any) => a.contentType?.startsWith('image/')
+      )
+    )
+
+    // If image is detected and Gemini is enabled, use Gemini for better image handling
+    if (messagesHaveImage && isProviderEnabled('google') && !messagesHavePDF) {
+      // Find a Gemini model that supports images
+      const geminiModel: Model = {
+        id: 'gemini-1.5-flash',
+        name: 'Gemini 1.5 Flash',
+        provider: 'Google',
+        providerId: 'google',
+        enabled: true,
+        toolCallType: 'manual' as const
+      }
+      
+      return createManualToolStreamResponse({
+        messages,
+        model: geminiModel,
+        chatId,
+        searchMode
+      })
     }
 
     const supportsToolCalling = selectedModel.toolCallType === 'native'
