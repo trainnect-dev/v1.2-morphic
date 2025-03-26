@@ -1,0 +1,45 @@
+# Docker Compose configuration for the morphic-stack development environment
+# This configuration is optimized for development with hot reloading
+
+name: morphic-stack-dev
+services:
+  morphic-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: bun run dev
+    env_file: .env.local
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - redis
+      - searxng
+    environment:
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=true # Enable polling for file changes in Windows/Docker
+
+  redis:
+    image: redis:alpine
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  searxng:
+    image: searxng/searxng
+    ports:
+      - '${SEARXNG_PORT:-8080}:8080'
+    env_file: .env.local
+    volumes:
+      - ./searxng-limiter.toml:/etc/searxng/limiter.toml
+      - ./searxng-settings.yml:/etc/searxng/settings.yml
+      - searxng_data:/data
+
+volumes:
+  redis_data:
+  searxng_data:

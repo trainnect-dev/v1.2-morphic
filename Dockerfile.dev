@@ -1,0 +1,22 @@
+# Development Dockerfile for Morphic
+# Optimized for hot reloading and fast development iterations
+
+FROM oven/bun:latest
+
+WORKDIR /app
+
+# Install dependencies
+COPY package.json bun.lockb ./
+RUN bun install
+
+# No need to copy source files or build the app
+# as we'll mount the local directory as a volume
+
+# Expose the port Next.js uses
+EXPOSE 3000
+
+# Set environment to development
+ENV NODE_ENV=development
+
+# Start the development server
+CMD ["bun", "run", "dev"]
